@@ -252,3 +252,41 @@ export async function writeFieldsVerified(
     );
   }
 }
+
+/* --------------------------------------------------------------- pipeline */
+
+export type Opportunity = { id: string; pipelineStageId?: string; name?: string };
+
+/** Opportunities for one contact. Used to decide create-vs-move. */
+export async function opportunitiesFor(contactId: string, pipelineId: string): Promise<Opportunity[]> {
+  const { locationId } = creds();
+  const d = await call<{ opportunities?: Opportunity[] }>(
+    `/opportunities/search?location_id=${locationId}&contact_id=${contactId}&pipeline_id=${pipelineId}&limit=20`,
+  ).catch(() => ({ opportunities: [] }));
+  return d.opportunities ?? [];
+}
+
+export async function createOpportunity(input: {
+  contactId: string; pipelineId: string; stageId: string; name: string;
+}): Promise<Opportunity | null> {
+  const { locationId } = creds();
+  const d = await call<{ opportunity?: Opportunity }>("/opportunities/", {
+    method: "POST",
+    body: JSON.stringify({
+      locationId,
+      pipelineId: input.pipelineId,
+      pipelineStageId: input.stageId,
+      contactId: input.contactId,
+      name: input.name,
+      status: "open",
+    }),
+  });
+  return d.opportunity ?? null;
+}
+
+export async function moveOpportunity(opportunityId: string, stageId: string): Promise<void> {
+  await call(`/opportunities/${opportunityId}`, {
+    method: "PUT",
+    body: JSON.stringify({ pipelineStageId: stageId }),
+  });
+}

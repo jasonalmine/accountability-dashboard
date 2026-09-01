@@ -7,9 +7,11 @@
  * The trade is deliberate: no trend charts without re-adding a store.
  */
 import {
-  MEMBER_TAG, addNote, addTags, fieldsOf, getContact, removeTags, searchContacts,
+  MEMBER_TAG, addNote, addTags, createOpportunity, fieldsOf, getContact,
+  moveOpportunity, opportunitiesFor, removeTags, searchContacts,
   displayName, updateContact, upsertContact, writeFieldsVerified, type RawContact,
 } from "./ghl";
+import { isMirroring, pipelineId, stageForCount } from "./pipeline";
 import { makeToken, readToken } from "./token";
 import { DEFAULT_STAGE, MODULES, PRIORITY_MEMBERS, ROSTER, TOTAL_LESSONS, VISIBLE_MODULES, denominatorFor, moduleForCount } from "./course";
 import { RECENT_DAYS } from "./constants";
@@ -246,6 +248,7 @@ export async function recordIntake(
   // member's bookmark never breaks.
   const token = makeToken(contact.id);
   await updateContact(contact.id, { [F.token]: token });
+  await mirrorStage(contact.id, name, null);
   return { contactId: contact.id, name, token };
 }
 
@@ -281,7 +284,34 @@ export async function recordCheckin(member: MemberRecord, input: {
     [F.status]: status,
   });
   await applyStatusTag(member.contactId, member.tags, status);
+  await mirrorStage(member.contactId, member.name, input.lessonsDone);
   return status;
+}
+
+/**
+ * Projects a lesson count onto a pipeline stage, so a stage-change workflow can
+ * fire on progress. Best-effort by design: a member's check-in is already saved
+ * by the time this runs, and losing a board position must never cost a
+ * submission. Failures are logged, not thrown.
+ */
+export async function mirrorStage(contactId: string, name: string, lessons: number | null) {
+  if (!isMirroring()) return;
+  const stage = stageForCount(lessons);
+  if (!stage) return;
+  try {
+    const pid = pipelineId();
+    const existing = await opportunitiesFor(contactId, pid);
+    if (existing.length === 0) {
+      await createOpportunity({ contactId, pipelineId: pid, stageId: stage.id, name });
+      return;
+    }
+    // Only write when the stage actually changes: a no-op PUT would re-fire
+    // every stage-change workflow on every check-in.
+    const opp = existing[0];
+    if (opp.pipelineStageId !== stage.id) await moveOpportunity(opp.id, stage.id);
+  } catch (err) {
+    console.error("pipeline mirror failed (check-in is still saved):", err);
+  }
 }
 
 /**

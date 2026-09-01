@@ -134,6 +134,19 @@ silently discarded. The app refuses to write to a field it cannot resolve.
 
 Only `/dashboard` is password-gated. The member pages are public by design.
 
+## Mirroring progress to a pipeline (optional)
+
+Set `PIPELINE_ID`, `PIPELINE_STAGES` and `PIPELINE_BANDS` and each check-in
+projects the member's lesson count onto a pipeline stage. The point is not
+reporting: a stage change is a first-class workflow trigger, so crossing into a
+stage can start a sequence without this app knowing that sequence exists.
+
+Two deliberate choices. The stage is only written when it actually changes, or
+a no-op update would re-fire every stage-change workflow on every check-in. And
+mirroring is best-effort: the check-in is already saved by the time it runs, so
+a failure is logged rather than thrown. Losing a board position must never cost
+a submission.
+
 ## Honest limitations
 
 - **Self-reported.** Nothing verifies that a member's number is true. The form
