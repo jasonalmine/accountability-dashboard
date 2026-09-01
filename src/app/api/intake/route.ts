@@ -3,30 +3,31 @@ import { recordIntake } from "@/lib/store";
 import { notifyN8n } from "@/lib/n8n";
 
 export async function POST(request: Request) {
-  let body: { name?: string; email?: string; batch?: string };
+  let body: { firstName?: string; lastName?: string; email?: string; batch?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 
-  const name = (body.name ?? "").trim();
+  const firstName = (body.firstName ?? "").trim().replace(/\s+/g, " ");
+  const lastName = (body.lastName ?? "").trim().replace(/\s+/g, " ");
   const email = (body.email ?? "").trim().toLowerCase();
   const batch = (body.batch ?? "").trim();
 
-  if (!name || !batch) return NextResponse.json({ error: "Pick your name and batch." }, { status: 400 });
+  if (!firstName || !lastName) {
+    return NextResponse.json({ error: "Enter your first and last name." }, { status: 400 });
+  }
+  if (firstName.length > 60 || lastName.length > 60) {
+    return NextResponse.json({ error: "That name looks too long." }, { status: 400 });
+  }
+  if (!batch) return NextResponse.json({ error: "Pick your batch." }, { status: 400 });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
     return NextResponse.json({ error: "That email address doesn't look right." }, { status: 400 });
   }
 
   try {
-    const result = await recordIntake(name, email, batch);
-    if (!result) {
-      return NextResponse.json(
-        { error: "We don't have that name on the roster. Ask a facilitator to add you." },
-        { status: 404 },
-      );
-    }
+    const result = await recordIntake(firstName, lastName, email, batch);
     await notifyN8n("intake", result);
     return NextResponse.json({ ok: true, checkinPath: `/checkin/${result.token}` });
   } catch (err) {

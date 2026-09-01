@@ -143,8 +143,11 @@ export async function searchContacts(tag?: string): Promise<RawContact[]> {
   return out;
 }
 
+/** first + last is preferred: the API stores contactName lowercased, which
+ *  would render "ana silva" on the dashboard. */
 export function displayName(c: RawContact): string {
-  return (c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || "").trim();
+  const parts = [c.firstName, c.lastName].filter(Boolean).join(" ").trim();
+  return parts || (c.contactName ?? "").trim();
 }
 
 /* ------------------------------------------------------------------- writes */
@@ -153,21 +156,21 @@ export const MEMBER_TAG = "acg:member";
 
 /** `fields` is keyed by DISPLAY NAME; keys are resolved before sending. */
 export async function upsertContact(input: {
-  name: string;
+  firstName: string;
+  lastName?: string;
   email?: string;
   fields?: Record<string, string | number>;
 }): Promise<RawContact> {
   const { locationId } = creds();
   const fields = input.fields ?? {};
   const keys = await shortKeys(Object.keys(fields));
-  const [firstName, ...rest] = input.name.trim().split(/\s+/);
   const data = await call<{ contact: RawContact }>("/contacts/upsert", {
     method: "POST",
     body: JSON.stringify({
       locationId,
-      firstName,
-      lastName: rest.join(" ") || undefined,
-      name: input.name,
+      firstName: input.firstName,
+      lastName: input.lastName || undefined,
+      name: [input.firstName, input.lastName].filter(Boolean).join(" "),
       ...(input.email ? { email: input.email } : {}),
       customFields: Object.entries(fields).map(([name, value]) => ({
         key: keys[name],

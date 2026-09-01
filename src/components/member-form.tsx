@@ -4,8 +4,9 @@ import { useState } from "react";
 
 type Field = { name: string; label: string; hint?: string };
 
-export function IntakeForm({ roster, batches }: { roster: string[]; batches: string[] }) {
-  const [name, setName] = useState("");
+export function IntakeForm({ batches }: { batches: string[] }) {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [batch, setBatch] = useState("");
   const [busy, setBusy] = useState(false);
@@ -20,7 +21,7 @@ export function IntakeForm({ roster, batches }: { roster: string[]; batches: str
       const res = await fetch("/api/intake", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, batch }),
+        body: JSON.stringify({ firstName, lastName, email, batch }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Could not save that.");
@@ -35,7 +36,7 @@ export function IntakeForm({ roster, batches }: { roster: string[]; batches: str
   if (link) {
     return (
       <div className="rounded-lg border border-ok/40 bg-surface p-5">
-        <h2 className="text-base font-medium text-ok">You&apos;re in, {name.split(" ")[0]}.</h2>
+        <h2 className="text-base font-medium text-ok">You&apos;re in, {firstName}.</h2>
         <p className="mt-2 text-sm text-muted">
           This is your personal check-in link. Bookmark it. We&apos;ll also email it to you before
           each session, so you never have to hunt for it.
@@ -50,14 +51,18 @@ export function IntakeForm({ roster, batches }: { roster: string[]; batches: str
 
   return (
     <form onSubmit={submit} className="grid gap-5">
-      <label className="grid gap-1.5">
-        <span className="text-sm font-medium">Your name</span>
-        <select required value={name} onChange={(e) => setName(e.target.value)} className="field">
-          <option value="">Choose your name</option>
-          {roster.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
-        <span className="text-xs text-muted">Not listed? Ask a facilitator to add you.</span>
-      </label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="grid gap-1.5">
+          <span className="text-sm font-medium">First name</span>
+          <input required value={firstName} onChange={(e) => setFirstName(e.target.value)}
+            autoComplete="given-name" placeholder="Ana" className="field" />
+        </label>
+        <label className="grid gap-1.5">
+          <span className="text-sm font-medium">Last name</span>
+          <input required value={lastName} onChange={(e) => setLastName(e.target.value)}
+            autoComplete="family-name" placeholder="Silva" className="field" />
+        </label>
+      </div>
 
       <label className="grid gap-1.5">
         <span className="text-sm font-medium">Your email</span>
@@ -75,7 +80,7 @@ export function IntakeForm({ roster, batches }: { roster: string[]; batches: str
       </label>
 
       {error && <p className="text-sm text-alert">{error}</p>}
-      <button type="submit" disabled={busy || !name || !batch}
+      <button type="submit" disabled={busy || !firstName.trim() || !lastName.trim() || !batch}
         className="tap justify-self-start rounded bg-accent px-5 text-sm text-white disabled:opacity-50">
         {busy ? "Saving…" : "Register"}
       </button>

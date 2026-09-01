@@ -171,8 +171,10 @@ export async function loadDashboard(): Promise<DashboardData> {
   };
 }
 
-export async function rosterNames(): Promise<string[]> {
-  return [...ROSTER].filter(Boolean).sort((a, b) => a.localeCompare(b));
+/** Optional: names expected to register. Used only to count who has not yet
+ *  signed up, never to gate registration. */
+export function expectedNames(): string[] {
+  return [...ROSTER].filter(Boolean);
 }
 
 /** Verifies the signature, then reads that one contact by id. No search, so
@@ -191,13 +193,21 @@ export async function memberByToken(token: string): Promise<MemberRecord | null>
   };
 }
 
-export async function recordIntake(name: string, email: string, batch: string) {
-  const wanted = name.trim();
-  const allowed = ROSTER.find((n) => n.toLowerCase() === wanted.toLowerCase());
-  if (!allowed) return null;
-
+/**
+ * Registration is open to anyone with the link; the link is the gate. Identity
+ * is the EMAIL, not the name: upsert dedupes on it, so a misspelled name cannot
+ * create a second person, and re-registering updates the same contact.
+ */
+export async function recordIntake(
+  firstName: string,
+  lastName: string,
+  email: string,
+  batch: string,
+) {
+  const name = `${firstName} ${lastName}`.trim();
   const contact = await upsertContact({
-    name: allowed,
+    firstName,
+    lastName,
     email,
     fields: { [F.batch]: batch, [F.stage]: DEFAULT_STAGE },
   });
@@ -207,7 +217,7 @@ export async function recordIntake(name: string, email: string, batch: string) {
   // member's bookmark never breaks.
   const token = makeToken(contact.id);
   await updateContact(contact.id, { [F.token]: token });
-  return { contactId: contact.id, name: allowed, token };
+  return { contactId: contact.id, name, token };
 }
 
 export async function recordCheckin(member: MemberRecord, input: {

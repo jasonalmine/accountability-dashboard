@@ -115,7 +115,7 @@ export function modulesCompleted(count: number): string[] {
 
 /** Batch / cohort options offered at sign-up. Edit to match your intakes. */
 export const BATCHES: string[] =
-  (process.env.BATCHES || "Batch 1,Batch 2,Batch 3,Batch 4,Batch 5,Batch 6")
+  (process.env.BATCHES || "Batch 7,Batch 8,Batch 9,Batch 10")
     .split(",").map((b) => b.trim()).filter(Boolean);
 
 /**

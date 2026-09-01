@@ -33,7 +33,7 @@ module the cohort is bunched in**. That last chart decides what you teach.
 
 ## What members see
 
-- `/` — register once, get a personal check-in link
+- `/` — register once with first name, last name, email and cohort
 - `/checkin/<token>` — the weekly form, no login
 
 The token in the link *is* their credential. No passwords, no accounts, no
@@ -70,14 +70,15 @@ the denominator for every percentage. Modules deliberately vary in size; the
 bottleneck chart is useful precisely because a 20-lesson module stalls people
 and a 4-lesson one does not.
 
-**2. Your roster.** Set `ROSTER` to the names allowed to register, comma- or
-newline-separated. Members pick their name at signup, so only people on that
-list can register, and a CRM contact is created when they do.
+**2. Your roster (optional).** `ROSTER` lists the names you *expect* to
+register. It is not a gate: anyone with the link can sign up. It exists so the
+dashboard can show who has not registered yet. Leave it empty and you simply
+see everyone who has.
 
-The roster is config rather than CRM data for a concrete reason: the CRM will
-not accept a contact without an email or phone, and members have neither until
-they register. Everyone on the list shows on the dashboard whether or not they
-have signed up, which is what makes "intake outstanding" meaningful.
+Identity is the **email**, not the name. The CRM dedupes on it, so a misspelled
+name cannot create a second person and re-registering updates the same contact.
+The trade-off is that someone who types a spelling different from your `ROSTER`
+entry appears as an extra row until you reconcile it.
 
 **3. Your branding.** All optional, all in `.env.local`:
 

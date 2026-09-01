@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { rosterNames } from "@/lib/store";
 import { isConfigured } from "@/lib/ghl";
 import { BATCHES } from "@/lib/course";
 import { IntakeForm } from "@/components/member-form";
@@ -11,19 +10,6 @@ export const metadata = { title: "Join the group" };
 export default async function Join() {
   if (!isConfigured()) return <NotConfigured />;
 
-  let roster: string[] = [];
-  try {
-    roster = await rosterNames();
-  } catch (err) {
-    console.error("join page load failed:", err);
-    return (
-      <main className="mx-auto max-w-xl p-8">
-        <h1 className="text-xl">Registration is briefly unavailable</h1>
-        <p className="mt-2 text-sm text-muted">Give it a minute and refresh. Nothing you typed was lost.</p>
-      </main>
-    );
-  }
-
   return (
     <main className="mx-auto w-full max-w-xl p-6 md:p-10">
       <header className="mb-8">
@@ -34,7 +20,7 @@ export default async function Join() {
           before every session, so there&apos;s nothing to log into and nothing to remember.
         </p>
       </header>
-      <IntakeForm roster={roster} batches={BATCHES} />
+      <IntakeForm batches={BATCHES} />
       <footer className="mt-10 flex flex-wrap justify-between gap-3 text-xs text-muted">
         <span>{branding.sessions ? `Sessions: ${branding.sessions}` : ""}</span>
         <Link href="/dashboard" className="text-muted hover:text-foreground">Facilitator sign-in</Link>
