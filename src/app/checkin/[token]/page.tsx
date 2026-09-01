@@ -1,5 +1,5 @@
 import { notFound, unstable_rethrow } from "next/navigation";
-import { memberByToken, MODULE_OPTIONS, type MemberRecord } from "@/lib/store";
+import { F, memberByToken, MODULE_OPTIONS, type MemberRecord } from "@/lib/store";
 import { TOTAL_LESSONS } from "@/lib/course";
 import { CheckinForm } from "@/components/member-form";
 import { branding } from "@/lib/branding";
@@ -41,7 +41,7 @@ export default async function Checkin({ params }: { params: Promise<{ token: str
           instead of a round of status updates.
         </p>
       </header>
-      <CheckinForm token={token} memberName={member.name} stage={member.fields.acg_stage ?? ""}
+      <CheckinForm token={token} memberName={member.name} stage={member.fields[F.stage] ?? ""}
         modules={MODULE_OPTIONS} totalLessons={TOTAL_LESSONS} progressHint={branding.progressHint} />
     </main>
   );

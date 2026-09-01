@@ -7,24 +7,31 @@
  * The trade is deliberate: no trend charts without re-adding a store.
  */
 import {
-  MEMBER_TAG, addNote, addTags, fieldsOf, searchContacts,
-  displayName, upsertContact, writeFieldsVerified, type RawContact,
+  MEMBER_TAG, addNote, addTags, fieldsOf, getContact, searchContacts,
+  displayName, updateContact, upsertContact, writeFieldsVerified, type RawContact,
 } from "./ghl";
+import { makeToken, readToken } from "./token";
 import { DEFAULT_STAGE, MODULES, PRIORITY_MEMBERS, ROSTER, TOTAL_LESSONS, VISIBLE_MODULES, denominatorFor, moduleForCount } from "./course";
 import { RECENT_DAYS } from "./constants";
 import type { Checkin, DashboardData, Member, ModuleRow, Progress, Status } from "./types";
 
+/**
+ * Custom fields by DISPLAY NAME. GHL derives the storage key from the name with
+ * its own slug rules, and a guessed key is accepted with a 200 and discarded,
+ * so the name is the contract and the key is resolved from the location.
+ * These names must match what provisioning creates.
+ */
 export const F = {
-  batch: "acg_batch",
-  stage: "acg_stage",
-  done: "acg_lessons_done",
-  prev: "acg_lessons_prev",
-  module: "acg_current_module",
-  lastCheckin: "acg_last_checkin",
-  token: "acg_token",
-  blocker: "acg_blocker",
-  commitment: "acg_commitment",
-  completed: "acg_completed",
+  batch: "ACG Batch",
+  stage: "ACG Stage",
+  done: "ACG Lessons Done",
+  prev: "ACG Lessons Previous",
+  module: "ACG Current Module",
+  lastCheckin: "ACG Last Check-in",
+  token: "ACG Check-in Token",
+  blocker: "ACG Blocker",
+  commitment: "ACG Commitment",
+  completed: "ACG Completed Since",
 } as const;
 
 export const PRIORITY_TAG = "acg:priority";
@@ -62,12 +69,12 @@ export async function loadRegistered(): Promise<MemberRecord[]> {
 export async function loadMembers(): Promise<MemberRecord[]> {
   const registered = await loadRegistered();
   const byName = new Map(registered.map((m) => [m.name.toLowerCase(), m]));
-  const merged = ROSTER.map(
-    (name) =>
-      byName.get(name.toLowerCase()) ?? {
-        contactId: "", name, email: "", fields: {}, tags: [],
-      },
-  );
+  // The roster spelling wins: the CRM stores contactName lowercased, which
+  // would render "gil fetilo" on the dashboard.
+  const merged = ROSTER.map((name) => {
+    const found = byName.get(name.toLowerCase());
+    return found ? { ...found, name } : { contactId: "", name, email: "", fields: {}, tags: [] };
+  });
   // Anyone tagged in the CRM but absent from the allowlist still counts.
   for (const m of registered) {
     if (!ROSTER.some((n) => n.toLowerCase() === m.name.toLowerCase())) merged.push(m);
@@ -168,35 +175,39 @@ export async function rosterNames(): Promise<string[]> {
   return [...ROSTER].filter(Boolean).sort((a, b) => a.localeCompare(b));
 }
 
+/** Verifies the signature, then reads that one contact by id. No search, so
+ *  a link works the instant it is issued. */
 export async function memberByToken(token: string): Promise<MemberRecord | null> {
-  if (!token) return null;
-  const registered = await loadRegistered();
-  return registered.find((m) => m.fields[F.token] === token) ?? null;
+  const contactId = readToken(token);
+  if (!contactId) return null;
+  const c = await getContact(contactId).catch(() => null);
+  if (!c || !(c.tags ?? []).includes(MEMBER_TAG)) return null;
+  return {
+    contactId: c.id,
+    name: displayName(c),
+    email: c.email ?? "",
+    fields: await fieldsOf(c),
+    tags: c.tags ?? [],
+  };
 }
 
-export async function recordIntake(name: string, email: string, batch: string, token: string) {
+export async function recordIntake(name: string, email: string, batch: string) {
   const wanted = name.trim();
   const allowed = ROSTER.find((n) => n.toLowerCase() === wanted.toLowerCase());
   if (!allowed) return null;
 
-  // Keep an already-issued token: re-registering must not invalidate a link the
-  // member has already bookmarked.
-  const already = (await loadRegistered()).find(
-    (m) => m.name.toLowerCase() === wanted.toLowerCase(),
-  );
-  const finalToken = already?.fields[F.token] || token;
-
   const contact = await upsertContact({
     name: allowed,
     email,
-    fields: {
-      [F.batch]: batch,
-      [F.token]: finalToken,
-      [F.stage]: already?.fields[F.stage] || DEFAULT_STAGE,
-    },
+    fields: { [F.batch]: batch, [F.stage]: DEFAULT_STAGE },
   });
   await addTags(contact.id, [MEMBER_TAG, `acg:batch-${batch.replace(/\D+/g, "") || batch}`]);
-  return { contactId: contact.id, name: allowed, token: finalToken };
+
+  // Derived from the contact id, so re-registering yields the same link and a
+  // member's bookmark never breaks.
+  const token = makeToken(contact.id);
+  await updateContact(contact.id, { [F.token]: token });
+  return { contactId: contact.id, name: allowed, token };
 }
 
 export async function recordCheckin(member: MemberRecord, input: {
@@ -215,7 +226,7 @@ export async function recordCheckin(member: MemberRecord, input: {
       `${input.commitment ? ` · commits: ${input.commitment}` : ""}`,
   );
 
-  await writeFieldsVerified(member.contactId, member.name, {
+  await writeFieldsVerified(member.contactId, {
     [F.prev]: previous,
     [F.done]: input.lessonsDone,
     [F.module]: input.currentModule,

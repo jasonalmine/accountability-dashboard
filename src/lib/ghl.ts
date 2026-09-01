@@ -67,25 +67,48 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
 /* ------------------------------------------------------------ custom fields */
 
 type FieldDef = { id: string; name: string; fieldKey: string; dataType: string };
-let fieldCache: { at: number; byShortKey: Map<string, FieldDef>; byId: Map<string, FieldDef> } | null = null;
+let fieldCache: { at: number; byName: Map<string, FieldDef>; byId: Map<string, FieldDef> } | null = null;
 const FIELD_TTL = 10 * 60 * 1000;
 
-/** Maps short key <-> field id. Reads give "contact.x"; writes need "x". */
+/**
+ * Fields are addressed by DISPLAY NAME, never by guessed key.
+ *
+ * GHL derives fieldKey from the name with its own slug rules: "ACG Check-in
+ * Token" becomes acg_checkin_token, "ACG Lessons Previous" becomes
+ * acg_lessons_previous. Predicting that is guesswork, and a wrong key is
+ * accepted with a 200 and silently discarded. So the name is the contract and
+ * the real key is read back from the location.
+ */
 export async function fieldMap() {
   if (fieldCache && Date.now() - fieldCache.at < FIELD_TTL) return fieldCache;
   const { locationId } = creds();
   const data = await call<{ customFields: FieldDef[] }>(`/locations/${locationId}/customFields`);
-  const byShortKey = new Map<string, FieldDef>();
+  const byName = new Map<string, FieldDef>();
   const byId = new Map<string, FieldDef>();
   for (const f of data.customFields ?? []) {
-    byShortKey.set(f.fieldKey.replace(/^contact\./, ""), f);
+    byName.set(f.name, f);
     byId.set(f.id, f);
   }
-  fieldCache = { at: Date.now(), byShortKey, byId };
+  fieldCache = { at: Date.now(), byName, byId };
   return fieldCache;
 }
 
-/** Custom field values keyed by SHORT key, whichever shape the API returned. */
+/** Display name -> the short key this location actually uses on writes. */
+export async function shortKeys(names: string[]): Promise<Record<string, string>> {
+  const { byName } = await fieldMap();
+  const missing = names.filter((n) => !byName.has(n));
+  if (missing.length) {
+    throw new GhlError(
+      `custom field(s) missing on this location: ${missing.join(", ")}. ` +
+        `Writing to them would return 200 and persist nothing. Run provisioning first.`,
+    );
+  }
+  return Object.fromEntries(
+    names.map((n) => [n, byName.get(n)!.fieldKey.replace(/^contact\./, "")]),
+  );
+}
+
+/** Custom field values keyed by DISPLAY NAME, whichever shape the API returned. */
 export async function fieldsOf(contact: RawContact): Promise<Record<string, string>> {
   const { byId } = await fieldMap();
   const out: Record<string, string> = {};
@@ -94,7 +117,7 @@ export async function fieldsOf(contact: RawContact): Promise<Record<string, stri
     if (!def) continue;
     const raw = cf.value ?? cf.fieldValue ?? cf.fieldValueString;
     if (raw === null || raw === undefined || raw === "") continue;
-    out[def.fieldKey.replace(/^contact\./, "")] = String(raw);
+    out[def.name] = String(raw);
   }
   return out;
 }
@@ -128,19 +151,7 @@ export function displayName(c: RawContact): string {
 
 export const MEMBER_TAG = "acg:member";
 
-/** Custom fields MUST be written by short key. A full "contact.x" key is
- *  accepted with a 200 and silently discarded, as is any unknown field. */
-async function assertFieldsExist(keys: string[]) {
-  const { byShortKey } = await fieldMap();
-  const missing = keys.filter((k) => !byShortKey.has(k));
-  if (missing.length) {
-    throw new GhlError(
-      `custom field(s) missing on this location: ${missing.join(", ")}. ` +
-        `Writing to them would return 200 and persist nothing. Run provisioning first.`,
-    );
-  }
-}
-
+/** `fields` is keyed by DISPLAY NAME; keys are resolved before sending. */
 export async function upsertContact(input: {
   name: string;
   email?: string;
@@ -148,7 +159,7 @@ export async function upsertContact(input: {
 }): Promise<RawContact> {
   const { locationId } = creds();
   const fields = input.fields ?? {};
-  await assertFieldsExist(Object.keys(fields));
+  const keys = await shortKeys(Object.keys(fields));
   const [firstName, ...rest] = input.name.trim().split(/\s+/);
   const data = await call<{ contact: RawContact }>("/contacts/upsert", {
     method: "POST",
@@ -158,10 +169,36 @@ export async function upsertContact(input: {
       lastName: rest.join(" ") || undefined,
       name: input.name,
       ...(input.email ? { email: input.email } : {}),
-      customFields: Object.entries(fields).map(([key, value]) => ({ key, field_value: String(value) })),
+      customFields: Object.entries(fields).map(([name, value]) => ({
+        key: keys[name],
+        field_value: String(value),
+      })),
     }),
   });
   return data.contact;
+}
+
+/**
+ * Update a contact already known by id. `upsert` cannot be used here: it
+ * requires an email or phone to dedupe on, which a check-in payload has no
+ * reason to carry. `fields` is keyed by DISPLAY NAME.
+ *
+ * Note this endpoint silently ignores a `tags` array — use addTags for those.
+ */
+export async function updateContact(
+  contactId: string,
+  fields: Record<string, string | number>,
+): Promise<void> {
+  const keys = await shortKeys(Object.keys(fields));
+  await call(`/contacts/${contactId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      customFields: Object.entries(fields).map(([name, value]) => ({
+        key: keys[name],
+        field_value: String(value),
+      })),
+    }),
+  });
 }
 
 /** PUT /contacts/{id} with {tags:[...]} returns 200 and persists nothing.
@@ -188,13 +225,16 @@ export async function getContact(contactId: string): Promise<RawContact> {
 /** Writes, then re-reads independently. A 200 is not evidence the value landed. */
 export async function writeFieldsVerified(
   contactId: string,
-  name: string,
   fields: Record<string, string | number>,
 ): Promise<void> {
-  await assertFieldsExist(Object.keys(fields));
-  await upsertContact({ name, fields });
+  await updateContact(contactId, fields);
   const after = await fieldsOf(await getContact(contactId));
-  const drifted = Object.entries(fields).filter(([k, v]) => after[k] !== String(v));
+  // Only non-empty values are verifiable. An empty value is stored as absent,
+  // so asserting on it reports drift for a write that behaved correctly, and a
+  // verifier that cries wolf is worse than none. Clearing stays best-effort.
+  const drifted = Object.entries(fields)
+    .filter(([, v]) => String(v) !== "")
+    .filter(([k, v]) => after[k] !== String(v));
   if (drifted.length) {
     throw new GhlError(
       `write reported success but did not persist: ${drifted.map(([k]) => k).join(", ")}`,

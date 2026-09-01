@@ -40,6 +40,12 @@ The token in the link *is* their credential. No passwords, no accounts, no
 "which email did I use". It also closes the hole a name-dropdown form leaves
 open, where anyone can submit as anyone.
 
+The token is the contact's id, HMAC-signed with `TOKEN_SECRET`. That is not
+decoration: a random token stored on the contact would have to be found by
+searching every contact, and that search index lags writes by seconds, so a
+member who registers and immediately clicks their own link would be told it is
+invalid. Signing the id means verify, then fetch that one contact.
+
 ## Quick start
 
 ```bash
@@ -114,11 +120,16 @@ still persists — the handoff is logged, never fatal.
 Vercel. Set `GHL_PIT`, `GHL_LOCATION_ID`, and `DASHBOARD_PASSWORD`. No database
 to provision.
 
-Before first use, create these custom fields on the location: `acg_batch`,
-`acg_stage`, `acg_lessons_done`, `acg_lessons_prev`, `acg_current_module`,
-`acg_last_checkin`, `acg_token`, `acg_blocker`, `acg_commitment`,
-`acg_completed`. The app refuses to write to a field that does not exist rather
-than accepting the silent no-op the API would otherwise give you.
+Before first use, create these custom fields on the location, **by these exact
+names**: `ACG Batch`, `ACG Stage`, `ACG Lessons Done`, `ACG Lessons Previous`,
+`ACG Current Module`, `ACG Last Check-in`, `ACG Check-in Token`, `ACG Blocker`,
+`ACG Commitment`, `ACG Completed Since`.
+
+Names, not keys. GoHighLevel derives the storage key from the name with its own
+slug rules — "ACG Check-in Token" becomes `acg_checkin_token`, "ACG Lessons
+Previous" becomes `acg_lessons_previous` — so the app resolves the real key from
+the location instead of guessing. A guessed key is accepted with a `200` and
+silently discarded. The app refuses to write to a field it cannot resolve.
 
 Only `/dashboard` is password-gated. The member pages are public by design.
 

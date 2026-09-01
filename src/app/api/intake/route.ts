@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { randomBytes } from "node:crypto";
 import { recordIntake } from "@/lib/store";
 import { notifyN8n } from "@/lib/n8n";
 
@@ -21,7 +20,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await recordIntake(name, email, batch, randomBytes(16).toString("hex"));
+    const result = await recordIntake(name, email, batch);
     if (!result) {
       return NextResponse.json(
         { error: "We don't have that name on the roster. Ask a facilitator to add you." },
