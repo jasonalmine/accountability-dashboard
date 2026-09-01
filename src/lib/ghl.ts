@@ -30,6 +30,12 @@ export type RawContact = {
   customFields?: { id: string; value?: unknown; fieldValue?: unknown; fieldValueString?: unknown }[];
 };
 
+/** Whether the store is wired up at all. A missing token is a setup state, not
+ *  an outage: telling an operator to "try again" would be a lie. */
+export function isConfigured(): boolean {
+  return Boolean(process.env.GHL_PIT && process.env.GHL_LOCATION_ID);
+}
+
 function creds() {
   const token = process.env.GHL_PIT;
   const locationId = process.env.GHL_LOCATION_ID;

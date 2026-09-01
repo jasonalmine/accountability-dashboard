@@ -1,4 +1,5 @@
 import { loadDashboard } from "@/lib/store";
+import { isConfigured } from "@/lib/ghl";
 import { Kpi } from "@/components/ui";
 import { ProgressTable } from "@/components/progress-table";
 import { ModuleChart } from "@/components/module-chart";
@@ -16,6 +17,8 @@ export const dynamic = "force-dynamic";
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
 export default async function Home() {
+  if (!isConfigured()) return <NotConfigured />;
+
   let data: DashboardData;
   try {
     data = await loadDashboard();
@@ -76,6 +79,21 @@ export default async function Home() {
       <footer className="mt-8 text-xs text-muted">
         Self-reported from each member&apos;s own course page.
       </footer>
+    </main>
+  );
+}
+
+function NotConfigured() {
+  return (
+    <main className="mx-auto max-w-xl p-8">
+      <h1 className="text-xl">Not connected yet</h1>
+      <p className="mt-3 text-sm text-muted">
+        This dashboard has no data source. Set <code className="text-foreground">GHL_PIT</code> and{" "}
+        <code className="text-foreground">GHL_LOCATION_ID</code>, then redeploy.
+      </p>
+      <p className="mt-2 text-sm text-muted">
+        Refreshing will not change this. See the README for setup.
+      </p>
     </main>
   );
 }

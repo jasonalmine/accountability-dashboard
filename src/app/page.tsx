@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { rosterNames } from "@/lib/store";
+import { isConfigured } from "@/lib/ghl";
 import { BATCHES } from "@/lib/course";
 import { IntakeForm } from "@/components/member-form";
 import { branding } from "@/lib/branding";
@@ -8,6 +9,8 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Join the group" };
 
 export default async function Join() {
+  if (!isConfigured()) return <NotConfigured />;
+
   let roster: string[] = [];
   try {
     roster = await rosterNames();
@@ -36,6 +39,21 @@ export default async function Join() {
         <span>{branding.sessions ? `Sessions: ${branding.sessions}` : ""}</span>
         <Link href="/dashboard" className="text-muted hover:text-foreground">Facilitator sign-in</Link>
       </footer>
+    </main>
+  );
+}
+
+function NotConfigured() {
+  return (
+    <main className="mx-auto max-w-xl p-8">
+      <h1 className="text-xl">Not connected yet</h1>
+      <p className="mt-3 text-sm text-muted">
+        This dashboard has no data source. Set <code className="text-foreground">GHL_PIT</code> and{" "}
+        <code className="text-foreground">GHL_LOCATION_ID</code>, then redeploy.
+      </p>
+      <p className="mt-2 text-sm text-muted">
+        Refreshing will not change this. See the README for setup.
+      </p>
     </main>
   );
 }
