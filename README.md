@@ -63,9 +63,14 @@ the denominator for every percentage. Modules deliberately vary in size; the
 bottleneck chart is useful precisely because a 20-lesson module stalls people
 and a 4-lesson one does not.
 
-**2. Your roster.** Contacts in your CRM tagged `acg:member`. Members pick their
-name at signup, so only people you have tagged can register. Tag someone
-`acg:priority` to mark attendance as required.
+**2. Your roster.** Set `ROSTER` to the names allowed to register, comma- or
+newline-separated. Members pick their name at signup, so only people on that
+list can register, and a CRM contact is created when they do.
+
+The roster is config rather than CRM data for a concrete reason: the CRM will
+not accept a contact without an email or phone, and members have neither until
+they register. Everyone on the list shows on the dashboard whether or not they
+have signed up, which is what makes "intake outstanding" meaningful.
 
 **3. Your branding.** All optional, all in `.env.local`:
 

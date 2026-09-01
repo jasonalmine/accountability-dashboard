@@ -10,7 +10,7 @@ import {
   MEMBER_TAG, addNote, addTags, fieldsOf, searchContacts,
   displayName, upsertContact, writeFieldsVerified, type RawContact,
 } from "./ghl";
-import { DEFAULT_STAGE, MODULES, TOTAL_LESSONS, VISIBLE_MODULES, denominatorFor, moduleForCount } from "./course";
+import { DEFAULT_STAGE, MODULES, PRIORITY_MEMBERS, ROSTER, TOTAL_LESSONS, VISIBLE_MODULES, denominatorFor, moduleForCount } from "./course";
 import { RECENT_DAYS } from "./constants";
 import type { Checkin, DashboardData, Member, ModuleRow, Progress, Status } from "./types";
 
@@ -40,7 +40,8 @@ export type MemberRecord = {
   tags: string[];
 };
 
-export async function loadMembers(): Promise<MemberRecord[]> {
+/** Registered members: contacts in the CRM carrying the member tag. */
+export async function loadRegistered(): Promise<MemberRecord[]> {
   const contacts = await searchContacts(MEMBER_TAG);
   return Promise.all(
     contacts.map(async (c: RawContact) => ({
@@ -51,6 +52,33 @@ export async function loadMembers(): Promise<MemberRecord[]> {
       tags: c.tags ?? [],
     })),
   );
+}
+
+/**
+ * The roster, with CRM data merged in where someone has registered. Everyone on
+ * the allowlist appears whether or not they signed up, so "intake outstanding"
+ * counts the people who still need chasing.
+ */
+export async function loadMembers(): Promise<MemberRecord[]> {
+  const registered = await loadRegistered();
+  const byName = new Map(registered.map((m) => [m.name.toLowerCase(), m]));
+  const merged = ROSTER.map(
+    (name) =>
+      byName.get(name.toLowerCase()) ?? {
+        contactId: "", name, email: "", fields: {}, tags: [],
+      },
+  );
+  // Anyone tagged in the CRM but absent from the allowlist still counts.
+  for (const m of registered) {
+    if (!ROSTER.some((n) => n.toLowerCase() === m.name.toLowerCase())) merged.push(m);
+  }
+  return merged;
+}
+
+/** Priority comes from config or a CRM tag: an unregistered member has no
+ *  contact to carry a tag, so config has to work on its own. */
+export function isPriority(m: MemberRecord): boolean {
+  return m.tags.includes(PRIORITY_TAG) || PRIORITY_MEMBERS.includes(m.name.toLowerCase());
 }
 
 export function toProgress(m: MemberRecord): Progress {
@@ -70,7 +98,7 @@ export function toProgress(m: MemberRecord): Progress {
   return {
     name: m.name,
     batch: m.fields[F.batch] || "",
-    priority: m.tags.includes(PRIORITY_TAG),
+    priority: isPriority(m),
     stage,
     lessonsDone: done,
     denominator,
@@ -92,7 +120,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     email: m.email,
     batch: m.fields[F.batch] || "",
     stage: m.fields[F.stage] || DEFAULT_STAGE,
-    priority: m.tags.includes(PRIORITY_TAG),
+    priority: isPriority(m),
     active: true,
     intakeDone: Boolean(m.email),
   }));
@@ -137,30 +165,38 @@ export async function loadDashboard(): Promise<DashboardData> {
 }
 
 export async function rosterNames(): Promise<string[]> {
-  return (await loadMembers()).map((m) => m.name).filter(Boolean).sort();
+  return [...ROSTER].filter(Boolean).sort((a, b) => a.localeCompare(b));
 }
 
 export async function memberByToken(token: string): Promise<MemberRecord | null> {
   if (!token) return null;
-  const members = await loadMembers();
-  return members.find((m) => m.fields[F.token] === token) ?? null;
+  const registered = await loadRegistered();
+  return registered.find((m) => m.fields[F.token] === token) ?? null;
 }
 
 export async function recordIntake(name: string, email: string, batch: string, token: string) {
-  const members = await loadMembers();
-  const existing = members.find((m) => m.name.toLowerCase() === name.trim().toLowerCase());
-  if (!existing) return null;
+  const wanted = name.trim();
+  const allowed = ROSTER.find((n) => n.toLowerCase() === wanted.toLowerCase());
+  if (!allowed) return null;
 
-  // Keep an already-issued token: re-registering must not invalidate the link
-  // a member has already bookmarked.
-  const finalToken = existing.fields[F.token] || token;
-  await upsertContact({
-    name: existing.name,
+  // Keep an already-issued token: re-registering must not invalidate a link the
+  // member has already bookmarked.
+  const already = (await loadRegistered()).find(
+    (m) => m.name.toLowerCase() === wanted.toLowerCase(),
+  );
+  const finalToken = already?.fields[F.token] || token;
+
+  const contact = await upsertContact({
+    name: allowed,
     email,
-    fields: { [F.batch]: batch, [F.token]: finalToken, [F.stage]: existing.fields[F.stage] || DEFAULT_STAGE },
+    fields: {
+      [F.batch]: batch,
+      [F.token]: finalToken,
+      [F.stage]: already?.fields[F.stage] || DEFAULT_STAGE,
+    },
   });
-  await addTags(existing.contactId, [MEMBER_TAG, `acg:batch-${batch.replace(/\D+/g, "") || batch}`]);
-  return { contactId: existing.contactId, name: existing.name, token: finalToken };
+  await addTags(contact.id, [MEMBER_TAG, `acg:batch-${batch.replace(/\D+/g, "") || batch}`]);
+  return { contactId: contact.id, name: allowed, token: finalToken };
 }
 
 export async function recordCheckin(member: MemberRecord, input: {

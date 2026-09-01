@@ -80,3 +80,17 @@ export function modulesCompleted(count: number): string[] {
 export const BATCHES: string[] =
   (process.env.BATCHES || "Batch 1,Batch 2,Batch 3,Batch 4,Batch 5,Batch 6")
     .split(",").map((b) => b.trim()).filter(Boolean);
+
+/**
+ * Who is allowed to register. Newline- or comma-separated.
+ *
+ * This is an allowlist, not the member store. The CRM cannot hold a contact
+ * without an email or phone, and members have neither until they sign up, so
+ * the roster lives here and a contact is created at registration.
+ */
+export const ROSTER: string[] = (process.env.ROSTER || "")
+  .split(/[\n,]/).map((n) => n.trim()).filter(Boolean);
+
+/** Members whose attendance the group treats as required. Optional. */
+export const PRIORITY_MEMBERS: string[] = (process.env.PRIORITY_MEMBERS || "")
+  .split(/[\n,]/).map((n) => n.trim().toLowerCase()).filter(Boolean);
