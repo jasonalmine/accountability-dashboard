@@ -57,7 +57,8 @@ and writes those.
 
 ## Making it yours
 
-**1. Your curriculum.** Edit `src/lib/course.ts`. The `lessons` across visible
+**1. Your curriculum.** Edit `src/lib/course.ts`, or set `COURSE_MODULES` and
+`COURSE_STAGES` to JSON arrays if you would rather configure than fork. The `lessons` across visible
 modules must sum to the total your course platform shows members — that total is
 the denominator for every percentage. Modules deliberately vary in size; the
 bottleneck chart is useful precisely because a 20-lesson module stalls people

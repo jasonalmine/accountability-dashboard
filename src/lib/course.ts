@@ -18,7 +18,28 @@ export type Module = {
   visible: boolean;
 };
 
-export const MODULES: Module[] = [
+/**
+ * Override the example below without forking: set COURSE_MODULES to a JSON
+ * array of {key,label,lessons,visible}. Malformed JSON falls back to the
+ * example and logs, rather than taking the whole app down.
+ */
+function loadModules(): Module[] | null {
+  const raw = process.env.COURSE_MODULES;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Module[];
+    if (!Array.isArray(parsed) || !parsed.length) throw new Error("empty");
+    for (const m of parsed) {
+      if (!m.key || !m.label) throw new Error(`module missing key or label: ${JSON.stringify(m)}`);
+    }
+    return parsed;
+  } catch (err) {
+    console.error("COURSE_MODULES is not valid, using the built-in example:", err);
+    return null;
+  }
+}
+
+const EXAMPLE_MODULES: Module[] = [
   { key: "START",     label: "Start Here",                     lessons: 3,    visible: true },
   { key: "MODULE 1",  label: "Module 1: Foundations",          lessons: 8,    visible: true },
   { key: "MODULE 2",  label: "Module 2: Core Concepts",        lessons: 20,   visible: true },
@@ -32,15 +53,31 @@ export const MODULES: Module[] = [
   { key: "MODULE 10", label: "Module 10: Advanced (locked)",   lessons: null, visible: false },
 ];
 
+export const MODULES: Module[] = loadModules() ?? EXAMPLE_MODULES;
+
 /**
  * Stages let the denominator grow when later content unlocks. If your course
  * never unlocks more, give every stage the same number.
  */
-export const STAGES: { name: string; denominator: number }[] = [
+const EXAMPLE_STAGES = [
   { name: "In Progress", denominator: 100 },
   { name: "Completed",   denominator: 100 },
   { name: "Advanced",    denominator: 100 },
 ];
+
+/** Override with COURSE_STAGES, a JSON array of {name,denominator}. */
+export const STAGES: { name: string; denominator: number }[] = (() => {
+  const raw = process.env.COURSE_STAGES;
+  if (!raw) return EXAMPLE_STAGES;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.length) throw new Error("empty");
+    return parsed;
+  } catch (err) {
+    console.error("COURSE_STAGES is not valid, using the built-in example:", err);
+    return EXAMPLE_STAGES;
+  }
+})();
 
 export const VISIBLE_MODULES = MODULES.filter((m) => m.visible);
 export const TOTAL_LESSONS = VISIBLE_MODULES.reduce((t, m) => t + (m.lessons ?? 0), 0);
