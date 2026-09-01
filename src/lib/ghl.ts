@@ -216,6 +216,14 @@ export async function addTags(contactId: string, tags: string[]): Promise<string
 
 /** Append-only audit line in the contact timeline. This is the recovery path if
  *  a custom field write silently no-ops and the previous value is lost. */
+export async function removeTags(contactId: string, tags: string[]): Promise<void> {
+  if (!tags.length) return;
+  await call(`/contacts/${contactId}/tags`, {
+    method: "DELETE",
+    body: JSON.stringify({ tags }),
+  });
+}
+
 export async function addNote(contactId: string, body: string): Promise<void> {
   await call(`/contacts/${contactId}/notes`, { method: "POST", body: JSON.stringify({ body }) });
 }

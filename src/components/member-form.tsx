@@ -146,9 +146,13 @@ export function CheckinForm({
       <label className="grid gap-1.5">
         <span className="text-sm font-medium">Lessons completed</span>
         <input required inputMode="numeric" pattern="[0-9]*" value={lessonsDone}
-          onChange={(e) => setLessonsDone(e.target.value.replace(/[^0-9]/g, ""))}
-          placeholder="42" className="field max-w-32" />
-        <span className="text-xs text-muted">
+          onChange={(e) => {
+            const digits = e.target.value.replace(/[^0-9]/g, "");
+            // Stop an out-of-range number at the keystroke, not after submitting.
+            setLessonsDone(digits && Number(digits) > totalLessons ? String(totalLessons) : digits);
+          }}
+          aria-describedby="lessons-hint" placeholder="42" className="field max-w-32" />
+        <span id="lessons-hint" className="text-xs text-muted">
           {progressHint} Copy that number exactly &mdash; don&apos;t estimate.
         </span>
       </label>

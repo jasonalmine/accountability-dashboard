@@ -1,6 +1,6 @@
 /** Pure derivation tests. Same scenarios the Postgres version was verified
  *  against, so a regression shows up as a changed number. No network. */
-import { toProgress, F, PRIORITY_TAG, type MemberRecord } from "../src/lib/store";
+import { toProgress, computeStatus, STATUS_TAG, F, PRIORITY_TAG, type MemberRecord } from "../src/lib/store";
 import { moduleForCount, TOTAL_LESSONS } from "../src/lib/course";
 
 let fails = 0;
@@ -73,6 +73,15 @@ const both = toProgress(member("Nikolai Volkov", {
   [F.done]: "17", [F.prev]: "17", [F.lastCheckin]: daysAgo(22),
 }));
 check("status", both.status, "STALLED");
+
+console.log("\nstatus is one definition, shared by dashboard and CRM write");
+check("no data", computeStatus(null, null, null), "No check-in");
+check("moved", computeStatus(42, 12, 1), "OK");
+check("no movement", computeStatus(20, 0, 2), "NO MOVEMENT");
+check("stale beats no movement", computeStatus(20, 0, 31), "STALLED");
+check("stale beats moved", computeStatus(55, 15, 31), "STALLED");
+check("at check-in time only OK or NO MOVEMENT", [computeStatus(42, 12, 0), computeStatus(20, 0, 0)], ["OK", "NO MOVEMENT"]);
+check("every status has a distinct tag", new Set(Object.values(STATUS_TAG)).size, 4);
 
 console.log(`\n${fails === 0 ? "ALL PASS" : `${fails} FAILURE(S)`}`);
 process.exit(fails ? 1 : 0);

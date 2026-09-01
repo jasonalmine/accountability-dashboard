@@ -7,7 +7,7 @@
  * The trade is deliberate: no trend charts without re-adding a store.
  */
 import {
-  MEMBER_TAG, addNote, addTags, fieldsOf, getContact, searchContacts,
+  MEMBER_TAG, addNote, addTags, fieldsOf, getContact, removeTags, searchContacts,
   displayName, updateContact, upsertContact, writeFieldsVerified, type RawContact,
 } from "./ghl";
 import { makeToken, readToken } from "./token";
@@ -32,9 +32,20 @@ export const F = {
   blocker: "ACG Blocker",
   commitment: "ACG Commitment",
   completed: "ACG Completed Since",
+  status: "ACG Status",
 } as const;
 
 export const PRIORITY_TAG = "acg:priority";
+
+/** One tag per status, so a GHL workflow can trigger on "tag added". Tags are
+ *  the reliable trigger surface; a field change fires on any contact edit. */
+export const STATUS_TAG: Record<Status, string> = {
+  "OK": "acg:status-ok",
+  "NO MOVEMENT": "acg:status-no-movement",
+  "STALLED": "acg:status-stalled",
+  "No check-in": "acg:status-never",
+};
+const ALL_STATUS_TAGS = Object.values(STATUS_TAG);
 const num = (v: string | undefined) => (v === undefined || v === "" ? null : Number(v));
 const daysBetween = (iso: string) =>
   Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -88,6 +99,28 @@ export function isPriority(m: MemberRecord): boolean {
   return m.tags.includes(PRIORITY_TAG) || PRIORITY_MEMBERS.includes(m.name.toLowerCase());
 }
 
+export const STALE_AFTER_DAYS = 10;
+
+/**
+ * One definition of status, shared by the dashboard and by what gets written
+ * back to the CRM, so a workflow triggering on a tag and a facilitator reading
+ * the table can never disagree.
+ *
+ * STALLED is the exception: it becomes true by time passing, not by anything a
+ * member does, so a check-in can only ever produce OK or NO MOVEMENT. Marking
+ * someone stalled needs a scheduled sweep.
+ */
+export function computeStatus(
+  done: number | null,
+  delta: number | null,
+  daysSince: number | null,
+): Status {
+  if (done === null) return "No check-in";
+  if (daysSince !== null && daysSince > STALE_AFTER_DAYS) return "STALLED";
+  if (delta !== null && delta === 0) return "NO MOVEMENT";
+  return "OK";
+}
+
 export function toProgress(m: MemberRecord): Progress {
   const stage = m.fields[F.stage] || DEFAULT_STAGE;
   const done = num(m.fields[F.done]);
@@ -95,11 +128,7 @@ export function toProgress(m: MemberRecord): Progress {
   const last = m.fields[F.lastCheckin] || "";
   const daysSince = last ? daysBetween(last) : null;
   const delta = done !== null && prev !== null ? done - prev : null;
-
-  let status: Status = "OK";
-  if (done === null || !last) status = "No check-in";
-  else if (daysSince !== null && daysSince > 10) status = "STALLED";
-  else if (delta !== null && delta === 0) status = "NO MOVEMENT";
+  const status = last ? computeStatus(done, delta, daysSince) : "No check-in";
 
   const denominator = denominatorFor(stage);
   return {
@@ -226,6 +255,11 @@ export async function recordCheckin(member: MemberRecord, input: {
 }) {
   const previous = member.fields[F.done] ?? "";
   const now = new Date().toISOString();
+  const prevNum = num(previous);
+  const delta = prevNum === null ? null : input.lessonsDone - prevNum;
+  // A member just checked in, so days-since is 0: this can only be OK or
+  // NO MOVEMENT. STALLED is produced by the scheduled sweep, not here.
+  const status = computeStatus(input.lessonsDone, delta, 0);
 
   // The note goes first and is append-only. If the field writes below drift or
   // silently no-op, this line is how the check-in is still recoverable.
@@ -244,7 +278,26 @@ export async function recordCheckin(member: MemberRecord, input: {
     [F.completed]: input.completed ?? "",
     [F.blocker]: input.blocker ?? "",
     [F.commitment]: input.commitment,
+    [F.status]: status,
   });
+  await applyStatusTag(member.contactId, member.tags, status);
+  return status;
+}
+
+/**
+ * Swaps the status tag. Stale ones are removed first so a workflow triggering
+ * on "tag added" fires once for the new state, and a contact never carries two
+ * contradictory statuses at the same time.
+ */
+export async function applyStatusTag(
+  contactId: string,
+  currentTags: string[],
+  status: Status,
+): Promise<void> {
+  const wanted = STATUS_TAG[status];
+  const stale = currentTags.filter((t) => ALL_STATUS_TAGS.includes(t) && t !== wanted);
+  if (stale.length) await removeTags(contactId, stale);
+  if (!currentTags.includes(wanted)) await addTags(contactId, [wanted]);
 }
 
 export const MODULE_OPTIONS = VISIBLE_MODULES.map((m) => ({ key: m.key, label: m.label }));
