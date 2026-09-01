@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+/*
+  Ventryx standard: Century Gothic first (a local family), Poppins loaded as the
+  web fallback. Weights are stepped down one notch: stats 700, headings 600,
+  body 400. No gradients anywhere: gradients are reserved to signal AI-to-AI
+  surfaces, so any decorative use here would dilute that signal.
+*/
+:root {
+  --background: #f7f7f5;
+  --surface: #ffffff;
+  --foreground: #1a1a1a;
+  --muted: #6b6b6b;
+  --border: #e3e3df;
+  --accent: #1f3a5f;
+  --ok: #2f7a4f;
+  --warn: #b06a1e;
+  --alert: #a8342d;
+  --track: #ebebe7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #131315;
+    --surface: #1b1b1e;
+    --foreground: #ededec;
+    --muted: #9a9a97;
+    --border: #2c2c30;
+    --accent: #7ba3d4;
+    --ok: #5bbd85;
+    --warn: #d99b46;
+    --alert: #e0736b;
+    --track: #2a2a2e;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-alert: var(--alert);
+  --color-track: var(--track);
+  --font-sans: "Century Gothic", CenturyGothic, "URW Gothic", var(--font-poppins),
+    Futura, "Trebuchet MS", sans-serif;
+  --font-mono: var(--font-fira), ui-monospace, monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-weight: 400;
+}
+
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
+.stat { font-weight: 700; font-variant-numeric: tabular-nums; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+.field {
+  width: 100%;
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .6rem .7rem;
+  font: inherit;
+  /* Never below 16px: iOS Safari zooms the whole page when focusing a smaller
+     input, and this group is mobile-first. */
+  font-size: 1rem;
+  min-height: 44px;
+}
+.field:focus { outline: none; border-color: var(--accent); }
+
+/* 44px minimum tap target on the primary actions members use on a phone. */
+.tap { min-height: 44px; }
