@@ -1,4 +1,4 @@
-import { loadDashboard, dbQuery } from "@/lib/db";
+import { loadDashboard } from "@/lib/store";
 import { Kpi } from "@/components/ui";
 import { ProgressTable } from "@/components/progress-table";
 import { ModuleChart } from "@/components/module-chart";
@@ -18,7 +18,7 @@ const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 export default async function Home() {
   let data: DashboardData;
   try {
-    data = await loadDashboard(dbQuery());
+    data = await loadDashboard();
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Unknown error";
     return (
@@ -26,8 +26,8 @@ export default async function Home() {
         <h1 className="text-lg">Could not load the tracker</h1>
         <p className="mt-2 text-sm text-muted">{detail}</p>
         <p className="mt-4 text-sm text-muted">
-          Most likely DATABASE_URL is unset or the schema has not been applied.
-          See the README.
+          Most likely GHL_PIT or GHL_LOCATION_ID is unset, or the custom fields
+          have not been provisioned on that location yet. See the README.
         </p>
       </main>
     );

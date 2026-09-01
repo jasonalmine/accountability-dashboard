@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
-import { dbQuery } from "@/lib/db";
+import { recordIntake } from "@/lib/store";
 import { notifyN8n } from "@/lib/n8n";
-import { UPSERT_INTAKE_SQL } from "@/lib/sql";
 
 export async function POST(request: Request) {
   let body: { name?: string; email?: string; batch?: string };
@@ -22,14 +21,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const q = dbQuery();
-    const rows = await q(UPSERT_INTAKE_SQL, [name, email, batch, randomBytes(16).toString("hex")]);
-    if (!rows.length) {
-      return NextResponse.json({ error: "We don't have that name on the roster. Ask a facilitator to add you." }, { status: 404 });
+    const result = await recordIntake(name, email, batch, randomBytes(16).toString("hex"));
+    if (!result) {
+      return NextResponse.json(
+        { error: "We don't have that name on the roster. Ask a facilitator to add you." },
+        { status: 404 },
+      );
     }
-    const member = rows[0] as { id: number; full_name: string; token: string };
-    await notifyN8n("intake", member);
-    return NextResponse.json({ ok: true, checkinPath: `/checkin/${member.token}` });
+    await notifyN8n("intake", result);
+    return NextResponse.json({ ok: true, checkinPath: `/checkin/${result.token}` });
   } catch (err) {
     console.error("intake failed:", err);
     return NextResponse.json({ error: "Could not save that. Try again in a moment." }, { status: 500 });

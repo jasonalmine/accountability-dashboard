@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { dbQuery } from "@/lib/db";
-import { BATCHES_SQL, ROSTER_SQL } from "@/lib/sql";
+import { rosterNames } from "@/lib/store";
+import { BATCHES } from "@/lib/course";
 import { IntakeForm } from "@/components/member-form";
 import { branding } from "@/lib/branding";
 
@@ -9,12 +9,8 @@ export const metadata = { title: "Join the group" };
 
 export default async function Join() {
   let roster: string[] = [];
-  let batches: string[] = [];
   try {
-    const q = dbQuery();
-    const [r, b] = await Promise.all([q(ROSTER_SQL), q(BATCHES_SQL)]);
-    roster = r.map((x) => String(x.full_name));
-    batches = b.map((x) => String(x.name));
+    roster = await rosterNames();
   } catch (err) {
     console.error("join page load failed:", err);
     return (
@@ -31,11 +27,11 @@ export default async function Join() {
         <p className="text-xs uppercase tracking-wide text-muted">{branding.groupName}</p>
         <h1 className="mt-2 text-2xl">Register once, then you&apos;re set</h1>
         <p className="mt-2 text-sm text-muted">
-          Takes about 30 seconds. You&apos;ll get a personal check-in link you use before every
-          session, so there&apos;s nothing to log into and nothing to remember.
+          Takes about 30 seconds. You&apos;ll get a personal check-in link you use
+          before every session, so there&apos;s nothing to log into and nothing to remember.
         </p>
       </header>
-      <IntakeForm roster={roster} batches={batches} />
+      <IntakeForm roster={roster} batches={BATCHES} />
       <footer className="mt-10 flex flex-wrap justify-between gap-3 text-xs text-muted">
         <span>{branding.sessions ? `Sessions: ${branding.sessions}` : ""}</span>
         <Link href="/dashboard" className="text-muted hover:text-foreground">Facilitator sign-in</Link>

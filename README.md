@@ -46,29 +46,26 @@ open, where anyone can submit as anyone.
 git clone https://github.com/<you>/accountability-dashboard
 cd accountability-dashboard
 npm install
-
-npm run db:dev          # real Postgres via PGlite on :5433, no Docker needed
-cp .env.example .env.local
-#   DATABASE_URL=postgres://postgres@127.0.0.1:5433/postgres
-#   DASHBOARD_PASSWORD=<anything>
-
-npm run dev             # http://localhost:3000
-npx tsx scripts/seed-demo.ts   # optional: 25 fictional members so it isn't empty
+cp .env.example .env.local   # add GHL_PIT, GHL_LOCATION_ID, DASHBOARD_PASSWORD
+npm run dev                  # http://localhost:3000
 ```
 
-`npm test` runs the production SQL against a throwaway Postgres.
+`npm test` runs the derivation logic with no network and no database.
+
+There is **no database to run**. Your CRM already stores contacts; this reads
+and writes those.
 
 ## Making it yours
 
-**1. Your curriculum.** Edit `db/seed.sql`. The `lessons` per visible module must
-sum to the total your course platform shows members — that total is the
-denominator for every percentage. Modules deliberately vary in size; the
+**1. Your curriculum.** Edit `src/lib/course.ts`. The `lessons` across visible
+modules must sum to the total your course platform shows members — that total is
+the denominator for every percentage. Modules deliberately vary in size; the
 bottleneck chart is useful precisely because a 20-lesson module stalls people
 and a 4-lesson one does not.
 
-**2. Your roster.** Put one name per line in `db/roster.txt` (gitignored;
-`db/roster.example.txt` ships as a sample). Members pick their name at signup,
-so only people you list can register.
+**2. Your roster.** Contacts in your CRM tagged `acg:member`. Members pick their
+name at signup, so only people you have tagged can register. Tag someone
+`acg:priority` to mark attendance as required.
 
 **3. Your branding.** All optional, all in `.env.local`:
 
@@ -86,12 +83,20 @@ so name the exact place: *"the line at the bottom of your course page"*.
 
 ## Architecture
 
-Next.js 16 on Vercel, Postgres for storage. That is the whole stack.
+Next.js 16 on Vercel. GoHighLevel is the store. There is no database.
 
-Progress is **time-series**, which is the one constraint the design turns on.
-"Moved +12 lessons since Tuesday" and "checked in but finished nothing" both
-need the *previous* value, so each check-in **appends a row** and is never an
-update. Everything else is a window function over that history.
+The design turns on one observation: **nothing here looks back further than one
+step.** "Moved +12 lessons" and "checked in but finished nothing" both need the
+*previous* value and nothing older. So the previous count lives in its own
+field, shifted forward on each check-in. A history table would be storing
+unbounded rows to answer a one-step question.
+
+The trade is deliberate and worth knowing: trend charts and per-batch curves
+over time are impossible without re-adding a store.
+
+Every check-in also writes an append-only **note** on the contact. That is the
+recovery path — this API has failure modes that return `200` and persist
+nothing, and the note survives them.
 
 Reminders are deliberately not built in. `N8N_WEBHOOK_URL` receives every intake
 and check-in, so you can wire n8n, Zapier, Make, or your own cron to send them
@@ -100,9 +105,14 @@ still persists — the handoff is logged, never fatal.
 
 ## Deploying
 
-Vercel plus any Postgres (Neon's free tier is plenty for a group this size).
-Set `DATABASE_URL` to the **pooled** connection string, add `DASHBOARD_PASSWORD`,
-then apply `db/schema.sql` and `db/seed.sql`.
+Vercel. Set `GHL_PIT`, `GHL_LOCATION_ID`, and `DASHBOARD_PASSWORD`. No database
+to provision.
+
+Before first use, create these custom fields on the location: `acg_batch`,
+`acg_stage`, `acg_lessons_done`, `acg_lessons_prev`, `acg_current_module`,
+`acg_last_checkin`, `acg_token`, `acg_blocker`, `acg_commitment`,
+`acg_completed`. The app refuses to write to a field that does not exist rather
+than accepting the silent no-op the API would otherwise give you.
 
 Only `/dashboard` is password-gated. The member pages are public by design.
 
@@ -114,6 +124,7 @@ Only `/dashboard` is password-gated. The member pages are public by design.
 - **Assumes ordered progress.** A single cumulative count maps to a module only
   if people work through in order. True for gated courses, less so for
   pick-your-own-path ones.
+- **One step of history.** Delta and stall detection work; trends do not.
 - **One shared facilitator password**, not per-user accounts. Right for a
   handful of facilitators, wrong for an organisation.
 

@@ -43,5 +43,3 @@ next-env.d.ts
 # keep the template, never the real one
 !.env.example
 
-# real roster stays local
-db/roster.txt
