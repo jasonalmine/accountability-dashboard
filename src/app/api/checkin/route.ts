@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { F, memberByToken, recordCheckin } from "@/lib/store";
+import { F, memberByContactId, memberByToken, recordCheckin } from "@/lib/store";
 import { denominatorFor } from "@/lib/course";
 import { notifyN8n } from "@/lib/n8n";
 
 export async function POST(request: Request) {
   let body: {
-    token?: string; lessonsDone?: unknown; currentModule?: string;
+    token?: string; contactId?: string; lessonsDone?: unknown; currentModule?: string;
     completed?: string; blocker?: string; commitment?: string;
   };
   try {
@@ -24,8 +24,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const member = await memberByToken(body.token ?? "");
-    if (!member) return NextResponse.json({ error: "That link is no longer valid." }, { status: 401 });
+    // Two entry points. A personal link proves identity by its signature; the
+    // shared /checkin page identifies the member by the name they picked, which
+    // proves nothing. Both resolve to the same record and the same validation.
+    const member = body.token
+      ? await memberByToken(body.token)
+      : await memberByContactId(typeof body.contactId === "string" ? body.contactId : "");
+    if (!member) {
+      return NextResponse.json(
+        { error: body.token ? "That link is no longer valid." : "Pick your name from the list." },
+        { status: body.token ? 401 : 400 },
+      );
+    }
 
     // The upper bound is the member's own course total. A typo of 420 for 42
     // otherwise passes validation, renders as a clamped 100% bar, and silently

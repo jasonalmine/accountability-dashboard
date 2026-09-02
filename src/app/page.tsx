@@ -23,6 +23,7 @@ export default async function Join() {
       <IntakeForm batches={BATCHES} />
       <footer className="mt-10 flex flex-wrap justify-between gap-3 text-xs text-muted">
         <span>{branding.sessions ? `Sessions: ${branding.sessions}` : ""}</span>
+        <Link href="/checkin" className="text-muted hover:text-foreground">Already registered? Check in</Link>
         <Link href="/dashboard" className="text-muted hover:text-foreground">Facilitator sign-in</Link>
       </footer>
     </main>

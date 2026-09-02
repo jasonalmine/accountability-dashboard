@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx test/store.test.mts && tsx test/token.test.mts"
+    "test": "tsx test/store.test.mts && tsx test/token.test.mts && tsx test/checkin-identity.test.mts"
   },
   "dependencies": {
     "lucide-react": "^1.38.0",

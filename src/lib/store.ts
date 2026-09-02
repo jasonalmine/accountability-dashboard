@@ -210,9 +210,13 @@ export function expectedNames(): string[] {
 
 /** Verifies the signature, then reads that one contact by id. No search, so
  *  a link works the instant it is issued. */
-export async function memberByToken(token: string): Promise<MemberRecord | null> {
-  const contactId = readToken(token);
-  if (!contactId) return null;
+/**
+ * Resolve a member by CRM contact id. The MEMBER_TAG check is the authorisation:
+ * without it any contact in the location could be checked in against, including
+ * people who are not in this group at all.
+ */
+export async function memberByContactId(contactId: string): Promise<MemberRecord | null> {
+  if (!contactId || !/^[A-Za-z0-9_-]{10,50}$/.test(contactId)) return null;
   const c = await getContact(contactId).catch(() => null);
   if (!c || !(c.tags ?? []).includes(MEMBER_TAG)) return null;
   return {
@@ -222,6 +226,12 @@ export async function memberByToken(token: string): Promise<MemberRecord | null>
     fields: await fieldsOf(c),
     tags: c.tags ?? [],
   };
+}
+
+export async function memberByToken(token: string): Promise<MemberRecord | null> {
+  const contactId = readToken(token);
+  if (!contactId) return null;
+  return memberByContactId(contactId);
 }
 
 /**

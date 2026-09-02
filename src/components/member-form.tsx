@@ -89,9 +89,9 @@ export function IntakeForm({ batches }: { batches: string[] }) {
 }
 
 export function CheckinForm({
-  token, memberName, stage, modules, totalLessons, progressHint,
+  token, contactId, memberName, stage, modules, totalLessons, progressHint,
 }: {
-  token: string; memberName: string; stage: string;
+  token?: string; contactId?: string; memberName: string; stage: string;
   modules: { key: string; label: string }[]; totalLessons: number;
   progressHint: string;
 }) {
@@ -116,7 +116,7 @@ export function CheckinForm({
       const res = await fetch("/api/checkin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, lessonsDone: Number(lessonsDone), currentModule, stage, ...fields }),
+        body: JSON.stringify({ token, contactId, lessonsDone: Number(lessonsDone), currentModule, stage, ...fields }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Could not save that.");
@@ -184,5 +184,63 @@ export function CheckinForm({
         {busy ? "Saving…" : "Submit check-in"}
       </button>
     </form>
+  );
+}
+
+export type PickerMember = {
+  contactId: string; name: string; stage: string; totalLessons: number;
+};
+
+/**
+ * The shared /checkin entry point. Picking a name is not authentication — it
+ * identifies who the check-in is for and nothing more. Contact ids are carried
+ * here rather than check-in tokens on purpose: a token is a permanent
+ * credential and putting all of them in a public page would hand out every
+ * member's personal link.
+ */
+export function PickerCheckinForm({
+  members, modules, progressHint,
+}: {
+  members: PickerMember[];
+  modules: { key: string; label: string }[];
+  progressHint: string;
+}) {
+  const [contactId, setContactId] = useState("");
+  const selected = members.find((m) => m.contactId === contactId);
+
+  return (
+    <div>
+      <label className="block">
+        <span className="text-sm font-medium">Your name</span>
+        <select
+          required value={contactId} onChange={(e) => setContactId(e.target.value)}
+          className="field mt-2"
+        >
+          <option value="">Choose your name</option>
+          {members.map((m) => (
+            <option key={m.contactId} value={m.contactId}>{m.name}</option>
+          ))}
+        </select>
+      </label>
+
+      {selected ? (
+        <div className="mt-6">
+          {/* Remount on change so one member's numbers never carry into another's form. */}
+          <CheckinForm
+            key={selected.contactId}
+            contactId={selected.contactId}
+            memberName={selected.name}
+            stage={selected.stage}
+            modules={modules}
+            totalLessons={selected.totalLessons}
+            progressHint={progressHint}
+          />
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-muted">
+          Pick your name to open your check-in. Not on the list? Register first on the home page.
+        </p>
+      )}
+    </div>
   );
 }
